@@ -1,0 +1,10 @@
+{
+  "saldo_inicial": 90.0,
+  "gastos": [
+    {
+      "valor": 35.0,
+      "descricao": "Compra desnecessaria",
+      "data": "2025-11-24"
+    }
+  ]
+}
