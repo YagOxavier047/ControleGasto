@@ -1,15 +1,14 @@
 # Arquivo: bd.py
-import mysql.connector
+import psycopg2
+from psycopg2.extras import RealDictCursor
 from datetime import datetime
 
+# Connection string do Neon
+CONNECTION_STRING = "postgresql://neondb_owner:npg_VEh6xyGT5WLs@ep-rapid-hat-ang1jm60-pooler.c-6.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require"
+
 def conectar():
-    """Conecta ao banco de dados MySQL."""
-    return mysql.connector.connect(
-        host="127.0.0.1",
-        user="root",
-        password="Midmid1064@",
-        database="bot_gastos"
-    )
+    """Retorna uma nova conexão com o banco."""
+    return psycopg2.connect(CONNECTION_STRING)
 
 def criar_tabela():
     """Cria as tabelas necessárias."""
@@ -19,22 +18,22 @@ def criar_tabela():
     # Tabela de movimentos
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS movimentos (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            tipo ENUM('entrada', 'gasto') NOT NULL,
+            id SERIAL PRIMARY KEY,
+            tipo VARCHAR(20) CHECK (tipo IN ('entrada', 'gasto')) NOT NULL,
             categoria VARCHAR(100) DEFAULT 'Geral',
             valor DECIMAL(10,2) NOT NULL,
             descricao VARCHAR(255) NOT NULL,
-            data_hora DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+            data_hora TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
     # Tabela de orçamento mensal
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS orcamento (
-            id INT AUTO_INCREMENT PRIMARY KEY,
+            id SERIAL PRIMARY KEY,
             mes_ano VARCHAR(7) NOT NULL,
             limite DECIMAL(10,2) NOT NULL,
-            UNIQUE KEY unique_mes (mes_ano)
+            UNIQUE (mes_ano)
         )
     """)
 
@@ -69,13 +68,13 @@ def inserir_entrada(descricao, valor):
 def listar_gastos(mes=None):
     """Lista movimentos, opcionalmente filtrando por mês."""
     db = conectar()
-    cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=RealDictCursor)
     
     if mes:
         cursor.execute("""
             SELECT tipo, categoria, valor, descricao, data_hora as data
             FROM movimentos
-            WHERE DATE_FORMAT(data_hora, '%Y-%m') = %s
+            WHERE TO_CHAR(data_hora, 'YYYY-MM') = %s
             ORDER BY data_hora DESC
         """, (mes,))
     else:
@@ -93,13 +92,13 @@ def listar_gastos(mes=None):
 def get_categorias_mes():
     """Retorna gastos agrupados por categoria no mês atual."""
     db = conectar()
-    cursor = db.cursor(dictionary=True)
+    cursor = db.cursor(cursor_factory=RealDictCursor)
     cursor.execute("""
         SELECT categoria, SUM(valor) as total
         FROM movimentos
         WHERE tipo = 'gasto'
-        AND MONTH(data_hora) = MONTH(CURDATE())
-        AND YEAR(data_hora) = YEAR(CURDATE())
+        AND EXTRACT(MONTH FROM data_hora) = EXTRACT(MONTH FROM CURRENT_DATE)
+        AND EXTRACT(YEAR FROM data_hora) = EXTRACT(YEAR FROM CURRENT_DATE)
         GROUP BY categoria
         ORDER BY total DESC
     """)
@@ -117,12 +116,12 @@ def detalhes_mes():
             COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE 0 END), 0) AS total_entradas,
             COALESCE(SUM(CASE WHEN tipo = 'gasto' THEN valor ELSE 0 END), 0) AS total_gastos
         FROM movimentos
-        WHERE MONTH(data_hora) = MONTH(CURDATE())
-        AND YEAR(data_hora) = YEAR(CURDATE())
+        WHERE EXTRACT(MONTH FROM data_hora) = EXTRACT(MONTH FROM CURRENT_DATE)
+        AND EXTRACT(YEAR FROM data_hora) = EXTRACT(YEAR FROM CURRENT_DATE)
     """)
     resultado = cursor.fetchone()
-    entradas = float(resultado[0]) if resultado[0] else 0.0
-    gastos = float(resultado[1]) if resultado[1] else 0.0
+    entradas = float(resultado[0]) if resultado and resultado[0] else 0.0
+    gastos = float(resultado[1]) if resultado and resultado[1] else 0.0
     cursor.close()
     db.close()
     return entradas, gastos, entradas - gastos
@@ -138,7 +137,7 @@ def saldo_disponivel():
         FROM movimentos
     """)
     resultado = cursor.fetchone()
-    saldo = float(resultado[0]) if resultado[0] else 0.0
+    saldo = float(resultado[0]) if resultado and resultado[0] else 0.0
     cursor.close()
     db.close()
     return saldo
@@ -151,7 +150,7 @@ def set_orcamento(limite):
     cursor.execute("""
         INSERT INTO orcamento (mes_ano, limite) 
         VALUES (%s, %s)
-        ON DUPLICATE KEY UPDATE limite = %s
+        ON CONFLICT (mes_ano) DO UPDATE SET limite = %s
     """, (mes_atual, limite, limite))
     db.commit()
     cursor.close()
