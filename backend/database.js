@@ -28,12 +28,25 @@ if (finalConnectionString.includes('?')) {
 }
 
 // 3. Configurações do pool de conexões
-const pool = new Pool({
+require('dotenv').config();
+const { Pool } = require('pg');
+
+// Configuração do pool com SSL flexível para RDS
+const poolConfig = {
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? {
-    rejectUnauthorized: false  // Aceita certificados autoassinados do RDS
-  } : false  // Em desenvolvimento, não usa SSL
-});
+  max: 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 5000,
+};
+
+// SSL apenas se for conexão PostgreSQL (RDS)
+if (process.env.DATABASE_URL && process.env.DATABASE_URL.includes('amazonaws.com')) {
+  poolConfig.ssl = {
+    rejectUnauthorized: false  // Aceita certificados do RDS
+  };
+}
+
+const pool = new Pool(poolConfig);
 
 // 5. Logger interno para queries (opcional - pode ser desativado em produção)
 const LOG_QUERIES = process.env.LOG_DB_QUERIES === 'true';
