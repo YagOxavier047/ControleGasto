@@ -1,5 +1,5 @@
-const API_URL = 'http://localhost:3001';
-const WS_URL = 'ws://localhost:8080';
+const API_URL = 'http://98.94.106.63 :3001';
+const WS_URL = 'ws://98.94.106.63 :8080';
 
 const formatBRL = (value) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
