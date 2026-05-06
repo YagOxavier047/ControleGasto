@@ -3,6 +3,7 @@ import telebot
 import os
 import time
 import io
+import requests  # ← Para enviar dados ao backend via HTTP
 from datetime import datetime
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
@@ -16,15 +17,47 @@ from bd import (
     set_orcamento, get_orcamento
 )
 
-# ⚠️ Use variável de ambiente ou insira seu token novo aqui
-TOKEN = "8585855474:AAFunl2wnS-rYfSXhtd0jIxlA3aqPygso6w"  # ← Substitua pelo token gerado no BotFather
-bot = telebot.TeleBot(TOKEN)
+# ⚙️ Configurações
+TOKEN = "8585855474:AAFunl2wnS-rYfSXhtd0jIxlA3aqPygso6w"  # ← Substitua se necessário
+BACKEND_WEBHOOK = "http://localhost:3001/api/webhook/bot"  # ← URL do seu backend
 
-criar_tabela()
+bot = telebot.TeleBot(TOKEN)
 
 # Categorias pré-definidas
 CATEGORIAS = ['Alimentação', 'Transporte', 'Moradia', 'Lazer', 
               'Saúde', 'Educação', 'Vestuário', 'Outros']
+
+# =============================================================================
+# 🔔 FUNÇÃO PARA NOTIFICAR O BACKEND (HTTP POST - não WebSocket!)
+# =============================================================================
+def notificar_backend(tipo, categoria, valor, descricao):
+    """
+    Envia nova movimentação para o backend via webhook HTTP.
+    Se o backend estiver offline, não quebra o bot (apenas loga o erro).
+    """
+    try:
+        payload = {
+            "tipo": tipo,
+            "categoria": categoria,
+            "valor": float(valor),
+            "descricao": descricao,
+            "data_hora": datetime.now().isoformat()
+        }
+        # Timeout de 2 segundos para não travar o bot se o backend estiver lento
+        response = requests.post(BACKEND_WEBHOOK, json=payload, timeout=2)
+        if response.status_code == 200:
+            print(f"✅ Notificação enviada ao backend: {tipo} - R$ {valor}")
+        else:
+            print(f"⚠️ Backend retornou status {response.status_code}")
+    except requests.exceptions.ConnectionError:
+        print("⚠️ Backend offline - movimentação salva apenas no banco")
+    except Exception as e:
+        print(f"⚠️ Erro ao notificar backend: {e}")
+    # Nunca raise exception aqui para não quebrar o fluxo do bot
+
+# =============================================================================
+# 🤖 COMANDOS DO BOT
+# =============================================================================
 
 @bot.message_handler(commands=["start"])
 def start(message):
@@ -36,7 +69,7 @@ def start(message):
         parse_mode="Markdown"
     )
 
-@bot.message_handler(commands=["ajuda"])  # /help → /ajuda
+@bot.message_handler(commands=["ajuda"])
 def ajuda(message):
     texto = (
         "📌 *COMANDOS DISPONÍVEIS*\n\n"
@@ -55,7 +88,7 @@ def ajuda(message):
     )
     bot.reply_to(message, texto, parse_mode="Markdown")
 
-@bot.message_handler(commands=["despesa"])  # /add → /despesa
+@bot.message_handler(commands=["despesa"])
 def registrar_despesa(message):
     try:
         partes = message.text.split()
@@ -80,7 +113,11 @@ def registrar_despesa(message):
                 f"Disponível: R$ {saldo_atual:.2f}\n"
                 f"Necessário: R$ {valor:.2f}")
         
+        # Salva no banco
         inserir_gasto(descricao, valor, categoria)
+        
+        # 🔔 Notifica o backend para atualização em tempo real
+        notificar_backend('gasto', categoria, valor, descricao)
         
         # Verificar orçamento
         limite = get_orcamento()
@@ -99,10 +136,10 @@ def registrar_despesa(message):
     except ValueError:
         bot.reply_to(message, "❌ Valor inválido. Use números (ex: 35.00 ou 35,00)")
     except Exception as e:
-        print(f"Erro: {e}")
+        print(f"❌ Erro ao registrar despesa: {e}")
         bot.reply_to(message, "❌ Erro ao registrar despesa")
 
-@bot.message_handler(commands=["receita"])  # /saldinc → /receita
+@bot.message_handler(commands=["receita"])
 def registrar_receita(message):
     try:
         partes = message.text.split(" ", 2)
@@ -112,17 +149,25 @@ def registrar_receita(message):
         valor = float(partes[1].replace(',', '.'))
         descricao = partes[2]
         
+        # Salva no banco
         inserir_entrada(descricao, valor)
+        
+        # 🔔 Notifica o backend para atualização em tempo real
+        notificar_backend('entrada', 'Receita', valor, descricao)
+        
         bot.reply_to(message, 
             f"💰 *Receita registrada!*\n"
             f"{descricao} - R$ {valor:.2f}\n"
             f"Saldo atual: R$ {saldo_disponivel():.2f}",
             parse_mode="Markdown"
         )
-    except:
-        bot.reply_to(message, "❌ Formato inválido")
+    except ValueError:
+        bot.reply_to(message, "❌ Valor inválido. Use números (ex: 1500.00)")
+    except Exception as e:
+        print(f"❌ Erro ao registrar receita: {e}")
+        bot.reply_to(message, "❌ Erro ao registrar receita")
 
-@bot.message_handler(commands=["movimentos"])  # /list → /movimentos
+@bot.message_handler(commands=["movimentos"])
 def ver_movimentos(message):
     movimentos = listar_gastos()
     if not movimentos:
@@ -149,7 +194,7 @@ def ver_categorias(message):
     
     bot.reply_to(message, texto, parse_mode="Markdown")
 
-@bot.message_handler(commands=["relatorio"])  # /total → /relatorio
+@bot.message_handler(commands=["relatorio"])
 def ver_relatorio(message):
     entradas, gastos, saldo = detalhes_mes()
     saldo_geral = saldo_disponivel()
@@ -175,7 +220,7 @@ def ver_relatorio(message):
     
     bot.reply_to(message, texto, parse_mode="Markdown")
 
-@bot.message_handler(commands=["baixar"])  # /pdf → /baixar
+@bot.message_handler(commands=["baixar"])
 def baixar_pdf(message):
     try:
         movimentos = listar_gastos()
@@ -227,10 +272,10 @@ def baixar_pdf(message):
         buffer.close()
         
     except Exception as e:
-        print(f"Erro PDF: {e}")
+        print(f"❌ Erro ao gerar PDF: {e}")
         bot.reply_to(message, "❌ Erro ao gerar PDF")
 
-@bot.message_handler(commands=["meta"])  # /orcamento → /meta
+@bot.message_handler(commands=["meta"])
 def definir_meta(message):
     try:
         partes = message.text.split()
@@ -243,24 +288,38 @@ def definir_meta(message):
             f"✅ Meta definida: *R$ {limite:.2f}*", 
             parse_mode="Markdown"
         )
-    except:
-        bot.reply_to(message, "❌ Valor inválido")
+    except ValueError:
+        bot.reply_to(message, "❌ Valor inválido. Use números (ex: 2000.00)")
+    except Exception as e:
+        print(f"❌ Erro ao definir meta: {e}")
+        bot.reply_to(message, "❌ Erro ao definir meta")
 
-@bot.message_handler(commands=["limpar"])  # /clear → /limpar
+@bot.message_handler(commands=["limpar"])
 def limpar_tudo(message):
     limpar_gastos()
     bot.reply_to(message, "🗑 Todos os dados foram apagados!")
 
-# 🔁 Loop com reconexão automática
-print("🔄 Conectando ao Telegram...")
+# =============================================================================
+# 🚀 INICIALIZAÇÃO DO BOT
+# =============================================================================
 
-while True:
-    try:
-        me = bot.get_me()
-        print(f"✅ Bot conectado: @{me.username}")
-        print("🚀 Aguardando comandos...")
-        bot.infinity_polling()
-    except Exception as e:
-        print(f"❌ Erro de conexão: {e}")
-        print("🔄 Reconectando em 5 segundos...")
-        time.sleep(5)
+if __name__ == "__main__":
+    # Cria tabela se não existir
+    criar_tabela()
+    
+    print("🔄 Conectando ao Telegram...")
+    
+    while True:
+        try:
+            me = bot.get_me()
+            print(f"✅ Bot conectado: @{me.username}")
+            print(f"🔗 Backend webhook: {BACKEND_WEBHOOK}")
+            print("🚀 Aguardando comandos... (Ctrl+C para parar)")
+            bot.infinity_polling()
+        except KeyboardInterrupt:
+            print("\n👋 Bot encerrado pelo usuário")
+            break
+        except Exception as e:
+            print(f"❌ Erro de conexão: {e}")
+            print("🔄 Reconectando em 5 segundos...")
+            time.sleep(5)
