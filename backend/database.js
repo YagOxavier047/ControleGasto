@@ -16,14 +16,15 @@ if (!connectionString) {
 const pool = new Pool({
   connectionString: connectionString,
   ssl: {
-    rejectUnauthorized: false  // RDS usa certificado válido
+    rejectUnauthorized: false,        // Aceita certificados autoassinados
+    checkServerIdentity: () => undefined  // Ignora validação de hostname do certificado
   },
   max: 10,
   idleTimeoutMillis: 30000,
   connectionTimeoutMillis: 5000
 });
 
-// Testa conexão
+// Testa conexão ao iniciar
 pool.connect((err, client, release) => {
   if (err) {
     console.error('❌ Erro ao conectar no banco:', err.message);
@@ -50,7 +51,7 @@ const query = async (text, params) => {
   }
 };
 
-// Fecha conexões
+// Fecha conexões (para graceful shutdown)
 const close = async () => {
   console.log('🔄 Fechando pool de conexões...');
   await pool.end();
