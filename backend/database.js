@@ -28,20 +28,12 @@ if (finalConnectionString.includes('?')) {
 }
 
 // 3. Configurações do pool de conexões
-const poolConfig = {
-  connectionString: finalConnectionString,
-  ssl: {
-    // RDS usa certificado válido, mas rejectUnauthorized:false evita erros de CA self-signed
-    rejectUnauthorized: false
-  },
-  max: 10,                    // Máximo de conexões simultâneas no pool
-  idleTimeoutMillis: 30000,   // Fecha conexões ociosas após 30 segundos
-  connectionTimeoutMillis: 5000, // Timeout para obter conexão do pool (5s)
-  allowExitOnIdle: false      // Mantém pool ativo mesmo sem queries
-};
-
-// 4. Cria o pool de conexões
-const pool = new Pool(poolConfig);
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? {
+    rejectUnauthorized: false  // Aceita certificados autoassinados do RDS
+  } : false  // Em desenvolvimento, não usa SSL
+});
 
 // 5. Logger interno para queries (opcional - pode ser desativado em produção)
 const LOG_QUERIES = process.env.LOG_DB_QUERIES === 'true';
