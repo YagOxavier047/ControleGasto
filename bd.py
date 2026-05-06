@@ -2,8 +2,12 @@
 import psycopg2
 import os
 import logging
+from dotenv import load_dotenv
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
+
+# Carrega variáveis de ambiente do arquivo .env
+load_dotenv()
 
 # Configuração de logging
 logging.basicConfig(level=logging.INFO)
