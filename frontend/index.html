@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SICAF - Controle Financeiro</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#4f46e5', dark: '#312e81' },
+            accent: { DEFAULT: '#fb923c', dark: '#ea580c' }
+          },
+          boxShadow: {
+            glow: '0 30px 90px rgba(79, 70, 229, 0.22)'
+          }
+        }
+      }
+    };
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+</head>
+<body class="min-h-screen bg-slate-950 text-slate-100">
+  <div class="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(79,70,229,0.24),_transparent_38%),_linear-gradient(180deg,_#020617,_#0f172a)]">
+    <div class="mx-auto max-w-[1480px] px-4 py-6 sm:px-6 lg:px-8">
+      <div class="grid gap-6 lg:grid-cols-[280px_minmax(0,_1fr)]">
+        <aside class="rounded-[40px] border border-slate-800/80 bg-slate-900/95 p-6 shadow-glow">
+          <div class="mb-8">
+            <span class="text-xs uppercase tracking-[0.28em] text-slate-500">SICAF</span>
+            <h2 class="mt-4 text-3xl font-semibold text-white">Painel</h2>
+            <p class="mt-3 max-w-[18rem] text-sm leading-6 text-slate-400">Acesse o resumo mais importante com navegação simples.</p>
+          </div>
+
+          <nav class="space-y-3">
+            <a class="flex items-center justify-between rounded-[24px] bg-slate-800/80 px-4 py-4 text-slate-100 transition hover:bg-slate-700/90" href="#">
+              <span>Dashboard</span>
+              <span class="inline-flex h-8 min-w-[2rem] items-center justify-center rounded-full bg-brand text-sm font-semibold text-white">24</span>
+            </a>
+            <a class="flex items-center justify-between rounded-[24px] bg-slate-800/70 px-4 py-4 text-slate-200 transition hover:bg-slate-700/90" href="#">
+              <span>Movimentações</span>
+              <span class="inline-flex h-8 min-w-[2rem] items-center justify-center rounded-full bg-slate-700 text-sm text-slate-200">112</span>
+            </a>
+            <a class="flex items-center justify-between rounded-[24px] bg-slate-800/70 px-4 py-4 text-slate-200 transition hover:bg-slate-700/90" href="#">
+              <span>Relatórios</span>
+              <span class="inline-flex h-8 min-w-[2rem] items-center justify-center rounded-full bg-slate-700 text-sm text-slate-200">07</span>
+            </a>
+            <a class="flex items-center justify-between rounded-[24px] bg-slate-800/70 px-4 py-4 text-slate-200 transition hover:bg-slate-700/90" href="#">
+              <span>Notificações</span>
+              <span class="inline-flex h-8 min-w-[2rem] items-center justify-center rounded-full bg-slate-700 text-sm text-slate-200">3</span>
+            </a>
+            <a class="flex items-center justify-between rounded-[24px] bg-slate-800/70 px-4 py-4 text-slate-200 transition hover:bg-slate-700/90" href="#">
+              <span>Configurações</span>
+              <span class="inline-flex h-8 min-w-[2rem] items-center justify-center rounded-full bg-slate-700 text-sm text-slate-200">2</span>
+            </a>
+          </nav>
+
+          <div class="mt-8 space-y-4">
+            <div class="rounded-[32px] bg-slate-800/80 p-4 border border-slate-700/70">
+              <p class="text-[11px] uppercase tracking-[0.35em] text-slate-500">Resumo mensal</p>
+              <div class="mt-4 grid gap-3">
+                <div class="rounded-[26px] bg-slate-950/80 p-4">
+                  <p class="text-[11px] uppercase tracking-[0.35em] text-slate-500">Gastos</p>
+                  <p id="side-gastos" class="mt-3 text-xl font-semibold text-orange-400">R$ 0,00</p>
+                </div>
+                <div class="rounded-[26px] bg-slate-950/80 p-4">
+                  <p class="text-[11px] uppercase tracking-[0.35em] text-slate-500">Entradas</p>
+                  <p id="side-entradas" class="mt-3 text-xl font-semibold text-cyan-400">R$ 0,00</p>
+                </div>
+              </div>
+            </div>
+
+            <div class="rounded-[32px] bg-slate-800/80 p-5 border border-slate-700/70">
+              <div class="flex items-center justify-between gap-4">
+                <p class="text-[11px] uppercase tracking-[0.35em] text-slate-500">Detalhes</p>
+                <button class="rounded-full bg-slate-700 px-3 py-2 text-xs font-semibold text-slate-100 transition hover:bg-slate-600">Ver</button>
+              </div>
+              <ul class="mt-5 space-y-3 text-slate-300">
+                <li class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+                  <span class="text-sm text-slate-400">Receitas</span>
+                  <strong id="detail-receitas">0</strong>
+                </li>
+                <li class="flex items-center justify-between border-b border-slate-700/60 pb-3">
+                  <span class="text-sm text-slate-400">Categorias</span>
+                  <strong id="detail-categorias">0</strong>
+                </li>
+                <li class="flex items-center justify-between">
+                  <span class="text-sm text-slate-400">Última entrada</span>
+                  <strong id="detail-ultima">-</strong>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </aside>
+
+        <main class="space-y-6">
+          <header class="overflow-hidden rounded-[32px] bg-gradient-to-r from-brand to-slate-700 p-8 shadow-glow">
+            <div class="max-w-2xl">
+              <p class="text-sm uppercase tracking-[0.35em] text-slate-200/80">Dashboard</p>
+              <h1 class="mt-4 text-4xl font-semibold text-white">Controle Financeiro</h1>
+              <p class="mt-3 max-w-2xl text-base leading-7 text-slate-200/80">Resumo compacto com foco em resultados e análises rápidas.</p>
+            </div>
+          </header>
+
+          <section class="grid gap-5 lg:grid-cols-[1.9fr_0.95fr]">
+            <div class="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
+              <div class="rounded-[32px] bg-slate-900/95 p-6 shadow-glow border border-slate-800/80">
+                <p class="text-xs uppercase tracking-[0.35em] text-slate-500">Saldo Total</p>
+                <p id="saldo" class="mt-5 text-3xl font-semibold text-white">R$ 0,00</p>
+              </div>
+              <div class="rounded-[32px] bg-slate-900/90 p-6 shadow-[0_20px_80px_-40px_rgba(15,23,42,0.8)] border border-slate-800/80">
+                <p class="text-xs uppercase tracking-[0.35em] text-slate-500">Gastos do Mês</p>
+                <p id="gastos-mes" class="mt-5 text-3xl font-semibold text-orange-400">R$ 0,00</p>
+              </div>
+              <div class="rounded-[32px] bg-slate-900/90 p-6 shadow-[0_20px_80px_-40px_rgba(15,23,42,0.8)] border border-slate-800/80">
+                <p class="text-xs uppercase tracking-[0.35em] text-slate-500">Entradas do Mês</p>
+                <p id="entradas-mes" class="mt-5 text-3xl font-semibold text-cyan-400">R$ 0,00</p>
+              </div>
+            </div>
+
+            <aside class="space-y-5">
+              <div class="rounded-[32px] bg-slate-900/95 p-6 shadow-glow border border-slate-800/80">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <p class="text-xs uppercase tracking-[0.35em] text-slate-500">Resumo do Bot</p>
+                    <h3 class="mt-2 text-2xl font-semibold text-white">Engine</h3>
+                  </div>
+                  <div class="rounded-full bg-slate-800 px-4 py-2 text-sm text-slate-200">45%</div>
+                </div>
+                <div class="mt-6 rounded-[24px] bg-slate-800/80 p-5 text-center">
+                  <span class="text-3xl font-bold text-slate-100">45%</span>
+                  <p class="mt-2 text-sm text-slate-400">Uso do bot hoje</p>
+                </div>
+              </div>
+
+              <div class="rounded-[32px] bg-slate-900/95 p-6 shadow-glow border border-slate-800/80">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-xs uppercase tracking-[0.35em] text-slate-500">Acesso ao bot</p>
+                  <span class="rounded-full bg-slate-800 px-3 py-1 text-xs text-slate-200">QR Code</span>
+                </div>
+                <div class="mt-6 space-y-3">
+                  <button id="btn-gerar-qr" class="w-full rounded-3xl bg-brand px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-dark">Gerar QR</button>
+                  <button id="btn-iniciar-leitor" class="w-full rounded-3xl border border-slate-700 bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-100 transition hover:border-slate-600">Abrir leitor</button>
+                </div>
+                <div id="qr-display" class="mt-5 hidden rounded-[24px] bg-slate-800/80 p-4">
+                  <img id="qr-img" src="" alt="QR Code do Bot" class="mx-auto h-40 w-40 rounded-2xl object-cover" />
+                  <p id="qr-link" class="mt-3 text-center text-sm text-slate-300"></p>
+                </div>
+                <div id="qr-reader" class="mt-4 hidden overflow-hidden rounded-[24px] border border-slate-700"></div>
+              </div>
+            </aside>
+          </section>
+
+          <section class="rounded-[32px] border border-slate-800/80 bg-slate-900/95 p-6 shadow-glow">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p class="text-sm uppercase tracking-[0.35em] text-slate-500">Movimentações rápidas</p>
+                <h2 class="mt-2 text-2xl font-semibold text-white">Filtrar por tipo</h2>
+              </div>
+              <div class="flex flex-wrap gap-3">
+                <button data-filter="all" class="filter-btn rounded-full bg-brand px-4 py-2 text-sm font-semibold text-white transition">Todos</button>
+                <button data-filter="entrada" class="filter-btn rounded-full bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-700/90">Entrada</button>
+                <button data-filter="gasto" class="filter-btn rounded-full bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-200 transition hover:bg-slate-700/90">Saída</button>
+              </div>
+            </div>
+
+            <div class="mt-6 overflow-hidden rounded-[32px] border border-slate-800/70 bg-slate-950/80">
+              <div class="overflow-x-auto">
+                <table class="min-w-full divide-y divide-slate-800 text-sm">
+                  <thead class="bg-slate-950/90 text-left text-xs uppercase tracking-[0.25em] text-slate-500">
+                    <tr>
+                      <th class="px-5 py-4">Data</th>
+                      <th class="px-5 py-4">Tipo</th>
+                      <th class="px-5 py-4">Categoria</th>
+                      <th class="px-5 py-4">Descrição</th>
+                      <th class="px-5 py-4">Valor</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tabela-movimentos" class="divide-y divide-slate-800 bg-slate-900/95"></tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        </main>
+      </div>
+
+      <footer class="mt-8 text-center text-sm text-slate-500">Powered by <span class="font-semibold text-brand">SICAF</span></footer>
+    </div>
+  </div>
+
+  <script src="dashboard.js"></script>
+</body>
+</html>
