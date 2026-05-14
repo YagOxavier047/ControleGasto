@@ -1,27 +1,90 @@
-@'
-# Python
+# -------------------
+# PYTHON
+# -------------------
 __pycache__/
-*.pyc
-.venv/
+*.py[cod]
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+.tox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
 venv/
+.venv/
 
-# Node (NUNCA suba isso!)
+# -------------------
+# NODE.JS
+# -------------------
 node_modules/
 npm-debug.log*
 yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
+.eslintcache
 
-# Segredos e ambiente
+# -------------------
+# ENVIRONMENT & SECRETS
+# -------------------
 .env
 .env.local
+.env.development.local
+.env.test.local
+.env.production.local
 *.pem
 *.key
+SICAF.pem
 
-# IDE e OS
+# -------------------
+# IDE / EDITOR
+# -------------------
 .vscode/
 .idea/
 *.swp
-.DS_Store
+*.swo
+*~
+.project
+.settings/
 
-# Logs
+# -------------------
+# OS FILES
+# -------------------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+# -------------------
+# LOGS
+# -------------------
 *.log
-'@ | Out-File -FilePath .gitignore -Encoding utf8
