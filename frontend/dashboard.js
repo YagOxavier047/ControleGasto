@@ -12,38 +12,73 @@ let ws = null;
 let movimentacoesData = [];
 let currentFilter = 'all';
 
-async function init() {
-  await loadDashboard();
-  await loadMovimentacoes();
-  await loadQRCode();
-  connectWebSocket();
-  setupQRReader();
-  setupFilters();
+// ===== UTILITÁRIOS =====
+function safeGetElement(id) {
+  const el = document.getElementById(id);
+  if (!el) console.warn(`⚠️ Elemento #${id} não encontrado`);
+  return el;
 }
 
+async function fetchJSON(url) {
+  const res = await fetch(url);
+  const contentType = res.headers.get('content-type');
+  
+  if (!contentType || !contentType.includes('application/json')) {
+    const text = await res.text();
+    console.error(`❌ Esperado JSON, recebido: ${contentType}`);
+    console.error('Resposta:', text.substring(0, 200));
+    throw new Error('API retornou HTML ou formato inválido');
+  }
+  
+  return res.json();
+}
+
+// ===== INICIALIZAÇÃO =====
+async function init() {
+  try {
+    await loadDashboard();
+    await loadMovimentacoes();
+    await loadQRCode();
+    connectWebSocket();
+    setupQRReader();
+    setupFilters();
+  } catch (err) {
+    console.error('Erro na inicialização:', err);
+  }
+}
+
+// ===== DASHBOARD =====
 async function loadDashboard() {
   try {
-    const res = await fetch(`${API_URL}/api/dashboard`);
-    const { success, data } = await res.json();
+    const { success, data } = await fetchJSON(`${API_URL}/api/dashboard`);
 
-    if (success) {
-      document.getElementById('saldo').textContent = formatBRL(data.saldo);
-      document.getElementById('gastos-mes').textContent = formatBRL(data.gastosMes);
-      document.getElementById('entradas-mes').textContent = formatBRL(data.entradasMes);
+    if (success && data) {
+      const saldoEl = safeGetElement('saldo');
+      const gastosEl = safeGetElement('gastos-mes');
+      const entradasEl = safeGetElement('entradas-mes');
+      
+      if (saldoEl) saldoEl.textContent = formatBRL(data.saldo);
+      if (gastosEl) gastosEl.textContent = formatBRL(data.gastosMes);
+      if (entradasEl) entradasEl.textContent = formatBRL(data.entradasMes);
+      
       updateSidebarSummary(data);
-      renderChart(data.categorias);
+      
+      // Só renderiza gráfico se o canvas existir
+      if (safeGetElement('grafico-categorias')) {
+        renderChart(data.categorias);
+      }
     }
   } catch (err) {
     console.error('Erro ao carregar dashboard:', err);
   }
 }
 
+// ===== MOVIMENTAÇÕES =====
 async function loadMovimentacoes() {
   try {
-    const res = await fetch(`${API_URL}/api/movimentacoes`);
-    const { success, data } = await res.json();
+    const { success, data } = await fetchJSON(`${API_URL}/api/movimentacoes`);
 
-    if (success) {
+    if (success && Array.isArray(data)) {
       movimentacoesData = data;
       renderMovimentacoes();
       updateSidebarDetails();
@@ -54,8 +89,11 @@ async function loadMovimentacoes() {
 }
 
 function updateSidebarSummary(data) {
-  document.getElementById('side-gastos').textContent = formatBRL(data.gastosMes);
-  document.getElementById('side-entradas').textContent = formatBRL(data.entradasMes);
+  const sideGastos = safeGetElement('side-gastos');
+  const sideEntradas = safeGetElement('side-entradas');
+  
+  if (sideGastos) sideGastos.textContent = formatBRL(data.gastosMes);
+  if (sideEntradas) sideEntradas.textContent = formatBRL(data.entradasMes);
 }
 
 function updateSidebarDetails() {
@@ -63,11 +101,16 @@ function updateSidebarDetails() {
   const categorias = [...new Set(movimentacoesData.map((item) => item.categoria))].length;
   const ultima = movimentacoesData.length ? formatDate(movimentacoesData[0].data_hora) : '-';
 
-  document.getElementById('detail-receitas').textContent = entradas;
-  document.getElementById('detail-categorias').textContent = categorias;
-  document.getElementById('detail-ultima').textContent = ultima;
+  const detailReceitas = safeGetElement('detail-receitas');
+  const detailCategorias = safeGetElement('detail-categorias');
+  const detailUltima = safeGetElement('detail-ultima');
+  
+  if (detailReceitas) detailReceitas.textContent = entradas;
+  if (detailCategorias) detailCategorias.textContent = categorias;
+  if (detailUltima) detailUltima.textContent = ultima;
 }
 
+// ===== FILTROS =====
 function setupFilters() {
   document.querySelectorAll('[data-filter]').forEach((button) => {
     button.addEventListener('click', () => setFilter(button.dataset.filter));
@@ -88,7 +131,9 @@ function setFilter(filter) {
 }
 
 function renderMovimentacoes() {
-  const tbody = document.getElementById('tabela-movimentos');
+  const tbody = safeGetElement('tabela-movimentos');
+  if (!tbody) return;
+  
   const rows = movimentacoesData
     .filter((item) => currentFilter === 'all' || item.tipo === currentFilter)
     .map((m) => {
@@ -118,8 +163,15 @@ function renderMovimentacoes() {
   tbody.innerHTML = rows.join('');
 }
 
+// ===== GRÁFICO =====
 function renderChart(categorias) {
-  const ctx = document.getElementById('grafico-categorias').getContext('2d');
+  const canvas = safeGetElement('grafico-categorias');
+  if (!canvas || !Array.isArray(categorias) || categorias.length === 0) {
+    console.log('📊 Gráfico: elementos ausentes ou sem dados');
+    return;
+  }
+  
+  const ctx = canvas.getContext('2d');
   const textColor = '#e2e8f0';
   const borderColor = '#334155';
   const surfaceColor = '#0f172a';
@@ -200,36 +252,51 @@ function renderChart(categorias) {
   });
 }
 
+// ===== WEBSOCKET =====
 function connectWebSocket() {
-  ws = new WebSocket(WS_URL);
+  try {
+    ws = new WebSocket(WS_URL);
 
-  ws.onopen = () => console.log('✅ WebSocket conectado');
+    ws.onopen = () => console.log('✅ WebSocket conectado');
 
-  ws.onmessage = (event) => {
-    const { type, data } = JSON.parse(event.data);
+    ws.onmessage = (event) => {
+      try {
+        const { type, data } = JSON.parse(event.data);
+        if (type === 'nova_movimentacao') {
+          movimentacoesData.unshift(data);
+          renderMovimentacoes();
+          updateSidebarDetails();
+          loadDashboard();
+        }
+      } catch (err) {
+        console.error('Erro ao processar mensagem WebSocket:', err);
+      }
+    };
 
-    if (type === 'nova_movimentacao') {
-      movimentacoesData.unshift(data);
-      renderMovimentacoes();
-      updateSidebarDetails();
-      loadDashboard();
-    }
-  };
-
-  ws.onclose = () => {
-    console.log('🔌 WebSocket desconectado. Reconectando em 3s...');
-    setTimeout(connectWebSocket, 3000);
-  };
+    ws.onclose = () => {
+      console.log('🔌 WebSocket desconectado. Reconectando em 3s...');
+      setTimeout(connectWebSocket, 3000);
+    };
+    
+    ws.onerror = (err) => {
+      console.error('❌ Erro no WebSocket:', err);
+    };
+  } catch (err) {
+    console.error('Erro ao conectar WebSocket:', err);
+  }
 }
 
+// ===== QR CODE =====
 async function loadQRCode() {
   try {
-    const res = await fetch(`${API_URL}/api/qr-code`);
-    const { success, qrCode, botUrl } = await res.json();
+    const { success, qrCode, botUrl } = await fetchJSON(`${API_URL}/api/qr-code`);
 
     if (success) {
-      document.getElementById('qr-img').src = qrCode;
-      document.getElementById('qr-link').innerHTML = `Link: <a href="${botUrl}" target="_blank" class="text-brand underline">${botUrl}</a>`;
+      const qrImg = safeGetElement('qr-img');
+      const qrLink = safeGetElement('qr-link');
+      
+      if (qrImg) qrImg.src = qrCode;
+      if (qrLink) qrLink.innerHTML = `Link: <a href="${botUrl}" target="_blank" class="text-brand underline">${botUrl}</a>`;
     }
   } catch (err) {
     console.error('Erro ao carregar QR:', err);
@@ -237,33 +304,49 @@ async function loadQRCode() {
 }
 
 function setupQRReader() {
-  const html5QrCode = new Html5Qrcode('qr-reader');
-
-  document.getElementById('btn-iniciar-leitor').addEventListener('click', async () => {
-    const readerDiv = document.getElementById('qr-reader');
+  const btnIniciar = safeGetElement('btn-iniciar-leitor');
+  const btnGerar = safeGetElement('btn-gerar-qr');
+  
+  if (!btnIniciar || !btnGerar) {
+    console.log('📷 Elementos do QR Reader não encontrados');
+    return;
+  }
+  
+  let html5QrCode = null;
+  
+  btnIniciar.addEventListener('click', async () => {
+    const readerDiv = safeGetElement('qr-reader');
+    if (!readerDiv) return;
+    
     readerDiv.classList.remove('hidden');
 
     try {
-      await html5QrCode.start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 250, height: 250 } },
-        (decodedText) => {
-          if (decodedText.includes('t.me')) {
-            window.open(decodedText, '_blank');
-            html5QrCode.stop();
-            readerDiv.classList.add('hidden');
-          }
-        },
-        (err) => console.log('Aguardando QR...')
-      );
+      if (typeof Html5Qrcode !== 'undefined') {
+        html5QrCode = new Html5Qrcode('qr-reader');
+        
+        await html5QrCode.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 250, height: 250 } },
+          (decodedText) => {
+            if (decodedText.includes('t.me')) {
+              window.open(decodedText, '_blank');
+              html5QrCode?.stop();
+              readerDiv.classList.add('hidden');
+            }
+          },
+          (err) => console.log('Aguardando QR...')
+        );
+      }
     } catch (err) {
       alert('Erro ao acessar câmera: ' + err);
     }
   });
 
-  document.getElementById('btn-gerar-qr').addEventListener('click', () => {
-    document.getElementById('qr-display').classList.remove('hidden');
+  btnGerar.addEventListener('click', () => {
+    const qrDisplay = safeGetElement('qr-display');
+    if (qrDisplay) qrDisplay.classList.remove('hidden');
   });
 }
 
+// ===== INICIALIZAÇÃO =====
 document.addEventListener('DOMContentLoaded', init);
