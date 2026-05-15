@@ -172,14 +172,20 @@ function renderChart(categorias) {
   }
   
   const ctx = canvas.getContext('2d');
-  const textColor = '#e2e8f0';
-  const borderColor = '#334155';
-  const surfaceColor = '#0f172a';
-  const panelColor = '#111827';
-  const chartColors = ['#38bdf8', '#fb923c', '#60a5fa', '#38bdf8', '#f97316', '#93c5fd'];
+  
+  // Cores vibrantes e harmônicas
+  const chartColors = [
+    '#38bdf8', // Azul claro
+    '#fb923c', // Laranja
+    '#a78bfa', // Roxo
+    '#34d399', // Verde
+    '#f472b6', // Rosa
+    '#60a5fa', // Azul médio
+    '#fbbf24', // Âmbar
+  ];
+  
   const totalValue = categorias.reduce((sum, item) => sum + item.total, 0);
-  const title = `Total: ${formatBRL(totalValue)}`;
-
+  
   if (chartInstance) chartInstance.destroy();
 
   chartInstance = new Chart(ctx, {
@@ -189,40 +195,63 @@ function renderChart(categorias) {
       datasets: [{
         data: categorias.map((c) => c.total),
         backgroundColor: chartColors,
-        borderColor: panelColor,
-        borderWidth: 3,
-        hoverOffset: 18,
-        spacing: 5,
+        borderColor: '#1e293b',
+        borderWidth: 4,
+        hoverBorderColor: '#ffffff',
+        hoverBorderWidth: 3,
+        spacing: 3,
+        offset: 0,
       }],
     },
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      cutout: '62%',
-      layout: { padding: 20 },
+      cutout: '70%', // Mais fino e elegante
+      layout: { 
+        padding: { top: 20, bottom: 20, left: 10, right: 10 }
+      },
       plugins: {
         legend: {
           position: 'bottom',
           labels: {
-            color: textColor,
-            boxWidth: 14,
-            boxHeight: 14,
-            padding: 16,
+            color: '#94a3b8',
+            font: {
+              family: 'Inter',
+              size: 12,
+              weight: '500'
+            },
+            padding: 20,
             usePointStyle: true,
+            pointStyle: 'circle',
+            boxWidth: 10,
+            boxHeight: 10,
           },
         },
         tooltip: {
-          backgroundColor: surfaceColor,
-          titleColor: textColor,
-          bodyColor: textColor,
-          borderColor: borderColor,
+          backgroundColor: 'rgba(15, 23, 42, 0.95)',
+          titleColor: '#f1f5f9',
+          bodyColor: '#e2e8f0',
+          borderColor: '#334155',
           borderWidth: 1,
-          padding: 12,
+          padding: 14,
+          titleFont: {
+            family: 'Inter',
+            size: 13,
+            weight: '600'
+          },
+          bodyFont: {
+            family: 'Inter',
+            size: 12
+          },
+          cornerRadius: 8,
+          displayColors: true,
+          boxWidth: 10,
+          boxHeight: 10,
           callbacks: {
             label: (context) => {
               const amount = formatBRL(context.parsed);
               const percentage = ((context.parsed / totalValue) * 100).toFixed(1);
-              return `${context.label}: ${amount} (${percentage}%)`;
+              return ` ${context.label}: ${amount} (${percentage}%)`;
             },
           },
         },
@@ -230,6 +259,13 @@ function renderChart(categorias) {
       animation: {
         animateScale: true,
         animateRotate: true,
+        duration: 1200,
+        easing: 'easeOutQuart',
+      },
+      hover: {
+        mode: 'nearest',
+        intersect: false,
+        animationDuration: 300,
       },
     },
     plugins: [{
@@ -237,15 +273,20 @@ function renderChart(categorias) {
       beforeDraw: (chart) => {
         const { width, height, ctx } = chart;
         ctx.save();
-        const fontSize = (height / 12).toFixed(2);
-        ctx.font = `bold ${fontSize}px Inter, sans-serif`;
-        ctx.fillStyle = textColor;
+        
+        // Total
+        const fontSize = (height / 16).toFixed(2);
+        ctx.font = `700 ${fontSize}px Inter, sans-serif`;
+        ctx.fillStyle = '#f1f5f9';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(title, width / 2, height / 2 - 10);
-        ctx.font = `400 ${Math.max(fontSize * 0.75, 14)}px Inter, sans-serif`;
-        ctx.fillStyle = '#94a3b8';
-        ctx.fillText('Gastos por categoria', width / 2, height / 2 + 18);
+        ctx.fillText(formatBRL(totalValue), width / 2, height / 2 - 12);
+        
+        // Label
+        ctx.font = `400 ${Math.max(fontSize * 0.65, 11)}px Inter, sans-serif`;
+        ctx.fillStyle = '#64748b';
+        ctx.fillText('Total', width / 2, height / 2 + 16);
+        
         ctx.restore();
       },
     }],
