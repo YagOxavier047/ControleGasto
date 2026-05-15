@@ -32,6 +32,8 @@
   <div class="min-h-screen bg-[radial-gradient(circle_at_top,_rgba(79,70,229,0.24),_transparent_38%),_linear-gradient(180deg,_#020617,_#0f172a)]">
     <div class="mx-auto max-w-[1480px] px-4 py-6 sm:px-6 lg:px-8">
       <div class="grid gap-6 lg:grid-cols-[280px_minmax(0,_1fr)]">
+        
+        <!-- SIDEBAR -->
         <aside class="rounded-[40px] border border-slate-800/80 bg-slate-900/95 p-6 shadow-glow">
           <div class="mb-8">
             <span class="text-xs uppercase tracking-[0.28em] text-slate-500">SICAF</span>
@@ -100,7 +102,10 @@
           </div>
         </aside>
 
+        <!-- CONTEÚDO PRINCIPAL -->
         <main class="space-y-6">
+          
+          <!-- HEADER -->
           <header class="overflow-hidden rounded-[32px] bg-gradient-to-r from-brand to-slate-700 p-8 shadow-glow">
             <div class="max-w-2xl">
               <p class="text-sm uppercase tracking-[0.35em] text-slate-200/80">Dashboard</p>
@@ -109,6 +114,7 @@
             </div>
           </header>
 
+          <!-- CARDS DE RESUMO -->
           <section class="grid gap-5 lg:grid-cols-[1.9fr_0.95fr]">
             <div class="grid gap-5 md:grid-cols-2 lg:grid-cols-3">
               <div class="rounded-[32px] bg-slate-900/95 p-6 shadow-glow border border-slate-800/80">
@@ -125,6 +131,7 @@
               </div>
             </div>
 
+            <!-- SIDEBAR DIREITA -->
             <aside class="space-y-5">
               <div class="rounded-[32px] bg-slate-900/95 p-6 shadow-glow border border-slate-800/80">
                 <div class="flex items-center justify-between gap-3">
@@ -158,6 +165,20 @@
             </aside>
           </section>
 
+          <!-- GRÁFICO PRINCIPAL (NOVO - O QUE FALTAVA!) -->
+          <section class="rounded-[32px] border border-slate-800/80 bg-slate-900/95 p-6 shadow-glow">
+            <div class="flex items-center justify-between mb-4">
+              <div>
+                <p class="text-sm uppercase tracking-[0.35em] text-slate-500">Análise</p>
+                <h2 class="text-xl font-semibold text-white">Gastos por Categoria</h2>
+              </div>
+            </div>
+            <div class="h-80 w-full">
+              <canvas id="grafico-categorias"></canvas>
+            </div>
+          </section>
+
+          <!-- TABELA DE MOVIMENTAÇÕES -->
           <section class="rounded-[32px] border border-slate-800/80 bg-slate-900/95 p-6 shadow-glow">
             <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
@@ -188,6 +209,23 @@
               </div>
             </div>
           </section>
+
+          <!-- GRÁFICOS SECUNDÁRIOS (CORRIGIDO - DENTRO DO BODY) -->
+          <section class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="rounded-[32px] bg-slate-900/95 p-6 shadow-glow border border-slate-800/80">
+              <h3 class="text-lg font-semibold text-cyan-400 mb-4 text-center">Receitas vs Despesas</h3>
+              <div class="h-64 w-full flex justify-center">
+                <canvas id="pizzaChart"></canvas>
+              </div>
+            </div>
+            <div class="rounded-[32px] bg-slate-900/95 p-6 shadow-glow border border-slate-800/80">
+              <h3 class="text-lg font-semibold text-orange-400 mb-4 text-center">Comparativo</h3>
+              <div class="h-64 w-full flex justify-center">
+                <canvas id="barChart"></canvas>
+              </div>
+            </div>
+          </section>
+
         </main>
       </div>
 
@@ -196,22 +234,5 @@
   </div>
 
   <script src="dashboard.js"></script>
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-    <!-- Gráfico de Pizza -->
-    <div class="bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-700">
-        <h3 class="text-xl font-bold text-cyan-400 mb-4 text-center">Receitas vs Despesas (Pizza)</h3>
-        <div class="relative h-64 w-full flex justify-center">
-            <canvas id="pizzaChart"></canvas>
-        </div>
-    </div>
-
-    <!-- Gráfico de Barras -->
-    <div class="bg-gray-800 rounded-lg shadow-lg p-6 border border-gray-700">
-        <h3 class="text-xl font-bold text-orange-400 mb-4 text-center">Comparativo (Barras)</h3>
-        <div class="relative h-64 w-full flex justify-center">
-            <canvas id="barChart"></canvas>
-        </div>
-    </div>
-</div>
 </body>
 </html>
