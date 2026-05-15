@@ -2,10 +2,13 @@ const express = require('express');
 const { Pool } = require('pg');
 const cors = require('cors');
 const path = require('path');
+const http = require('http');
+const WebSocket = require('ws');
 require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const WS_PORT = process.env.WS_PORT || 8080;
 
 // Configuração do Pool de Conexão PostgreSQL
 const pool = new Pool({
@@ -32,17 +35,16 @@ app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../frontend')));
 
+// ===== ROTAS DA API (ANTES DO CATCH-ALL) =====
+
 // Rota da API: Dashboard
 app.get('/api/dashboard', async (req, res) => {
   try {
-    // Saldo total
     const saldoResult = await query(`
-      SELECT 
-        COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE -valor END), 0) as saldo
+      SELECT COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE -valor END), 0) as saldo
       FROM movimentos
     `);
     
-    // Gastos do mês atual
     const gastosResult = await query(`
       SELECT COALESCE(SUM(valor), 0) as total 
       FROM movimentos 
@@ -51,7 +53,6 @@ app.get('/api/dashboard', async (req, res) => {
       AND EXTRACT(YEAR FROM data_hora) = EXTRACT(YEAR FROM CURRENT_DATE)
     `);
     
-    // Entradas do mês
     const entradasResult = await query(`
       SELECT COALESCE(SUM(valor), 0) as total 
       FROM movimentos 
@@ -60,21 +61,18 @@ app.get('/api/dashboard', async (req, res) => {
       AND EXTRACT(YEAR FROM data_hora) = EXTRACT(YEAR FROM CURRENT_DATE)
     `);
 
-    // Total Histórico de Receitas (Para o Gráfico)
     const totalReceitasResult = await query(`
       SELECT COALESCE(SUM(valor), 0) as total 
       FROM movimentos 
       WHERE tipo = 'entrada'
     `);
 
-    // Total Histórico de Despesas (Para o Gráfico)
     const totalDespesasResult = await query(`
       SELECT COALESCE(SUM(valor), 0) as total 
       FROM movimentos 
       WHERE tipo IN ('gasto', 'saida')
     `);
     
-    // Categorias mais gastas (Top 5)
     const categoriasResult = await query(`
       SELECT categoria, SUM(valor) as total, COUNT(*) as qtd
       FROM movimentos 
@@ -84,7 +82,6 @@ app.get('/api/dashboard', async (req, res) => {
       LIMIT 5
     `);
 
-    // CORREÇÃO AQUI: Estrutura correta do JSON com a chave 'data'
     res.json({
       success: true,
       data: {
@@ -106,8 +103,8 @@ app.get('/api/dashboard', async (req, res) => {
   }
 });
 
-// Rota da API: Listar Movimentações
-app.get('/api/movimentos', async (req, res) => {
+// Rota da API: Listar Movimentações (CORRIGIDO: nome da rota)
+app.get('/api/movimentacoes', async (req, res) => {
   try {
     const result = await query(`
       SELECT id, descricao, valor, tipo, categoria, data_hora
@@ -117,12 +114,13 @@ app.get('/api/movimentos', async (req, res) => {
     `);
     res.json({ success: true, data: result.rows });
   } catch (error) {
+    console.error('Erro ao buscar movimentações:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // Rota da API: Adicionar Movimentação
-app.post('/api/movimentos', async (req, res) => {
+app.post('/api/movimentacoes', async (req, res) => {
   const { descricao, valor, tipo, categoria, data_hora } = req.body;
   try {
     const result = await query(
@@ -132,29 +130,84 @@ app.post('/api/movimentos', async (req, res) => {
       [descricao, valor, tipo, categoria, data_hora || new Date()]
     );
     
+    // Notifica via WebSocket
+    if (wss) {
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify({
+            type: 'nova_movimentacao',
+            data: result.rows[0]
+          }));
+        }
+      });
+    }
+    
     res.json({ success: true, data: result.rows[0] });
   } catch (error) {
+    console.error('Erro ao adicionar movimentação:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
 // Rota da API: Deletar Movimentação
-app.delete('/api/movimentos/:id', async (req, res) => {
+app.delete('/api/movimentacoes/:id', async (req, res) => {
   const { id } = req.params;
   try {
     await query('DELETE FROM movimentos WHERE id = $1', [id]);
     res.json({ success: true });
   } catch (error) {
+    console.error('Erro ao deletar movimentação:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Serve o frontend para qualquer outra rota
+// Rota da API: QR Code (NOVA ROTA)
+app.get('/api/qr-code', async (req, res) => {
+  try {
+    // Gera URL do bot (substitua pelo seu username real)
+    const botUsername = 'seu_bot_username'; // ← COLOQUE SEU BOT AQUI
+    const botUrl = `https://t.me/${botUsername}`;
+    
+    // Gera QR Code em base64 (usando API pública)
+    const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(botUrl)}`;
+    
+    res.json({
+      success: true,
+      qrCode: qrCodeUrl,
+      botUrl: botUrl
+    });
+  } catch (error) {
+    console.error('Erro ao gerar QR Code:', error);
+    res.status(500).json({ success: false, error: 'Erro ao gerar QR Code' });
+  }
+});
+
+// Serve o frontend para qualquer outra rota (POR ÚLTIMO!)
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../frontend/index.html'));
 });
 
-// Iniciar servidor
-app.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`);
+// ===== SERVIDOR HTTP + WEBSOCKET =====
+const server = http.createServer(app);
+
+// WebSocket Server na porta 8080
+const wss = new WebSocket.Server({ port: WS_PORT });
+
+wss.on('connection', (ws) => {
+  console.log('✅ Cliente WebSocket conectado');
+  
+  ws.on('close', () => {
+    console.log('🔌 Cliente WebSocket desconectado');
+  });
+  
+  ws.on('error', (err) => {
+    console.error('❌ Erro no WebSocket:', err);
+  });
+});
+
+console.log(`🚀 WebSocket rodando em ws://localhost:${WS_PORT}`);
+
+// Iniciar servidor HTTP
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Servidor HTTP rodando em http://0.0.0.0:${PORT}`);
 });
