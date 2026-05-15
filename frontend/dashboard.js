@@ -1,5 +1,5 @@
-const API_URL = 'http://54.163.234.239:3001';
-const WS_URL = 'ws://54.163.234.239:8080';
+const API_URL = 'http://54.196.11.194:3001';
+const WS_URL = 'ws://54.196.11.194:8080';
 
 const formatBRL = (value) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
