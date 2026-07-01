@@ -1,6 +1,8 @@
-const API_URL = 'http://54.196.11.194:3001';
-const WS_URL = 'ws://54.196.11.194:8080';
+// ===== CONFIGURAÇÃO DA API =====
+const API_URL = 'https://mm7l9zx6wa.execute-api.us-east-1.amazonaws.com/default';
+const WS_URL = 'ws://54.196.11.194:8080'; // Mantém WebSocket se ainda usar
 
+// ===== UTILITÁRIOS =====
 const formatBRL = (value) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
 
@@ -12,25 +14,10 @@ let ws = null;
 let movimentacoesData = [];
 let currentFilter = 'all';
 
-// ===== UTILITÁRIOS =====
 function safeGetElement(id) {
   const el = document.getElementById(id);
   if (!el) console.warn(`⚠️ Elemento #${id} não encontrado`);
   return el;
-}
-
-async function fetchJSON(url) {
-  const res = await fetch(url);
-  const contentType = res.headers.get('content-type');
-  
-  if (!contentType || !contentType.includes('application/json')) {
-    const text = await res.text();
-    console.error(`❌ Esperado JSON, recebido: ${contentType}`);
-    console.error('Resposta:', text.substring(0, 200));
-    throw new Error('API retornou HTML ou formato inválido');
-  }
-  
-  return res.json();
 }
 
 // ===== INICIALIZAÇÃO =====
@@ -50,22 +37,24 @@ async function init() {
 // ===== DASHBOARD =====
 async function loadDashboard() {
   try {
-    const { success, data } = await fetchJSON(`${API_URL}/api/dashboard`);
-
-    if (success && data) {
+    const response = await fetch(`${API_URL}/controle-gastos-powerbi`);
+    const result = await response.json();
+    
+    if (result.success && result.data && result.data.dashboard) {
+      const dashboard = result.data.dashboard;
+      
       const saldoEl = safeGetElement('saldo');
       const gastosEl = safeGetElement('gastos-mes');
       const entradasEl = safeGetElement('entradas-mes');
-      
-      if (saldoEl) saldoEl.textContent = formatBRL(data.saldo);
-      if (gastosEl) gastosEl.textContent = formatBRL(data.gastosMes);
-      if (entradasEl) entradasEl.textContent = formatBRL(data.entradasMes);
-      
-      updateSidebarSummary(data);
-      
-      // Só renderiza gráfico se o canvas existir
-      if (safeGetElement('grafico-categorias')) {
-        renderChart(data.categorias);
+
+      if (saldoEl) saldoEl.textContent = formatBRL(dashboard.saldo);
+      if (gastosEl) gastosEl.textContent = formatBRL(dashboard.gastosMes);
+      if (entradasEl) entradasEl.textContent = formatBRL(dashboard.entradasMes || 0);
+
+      updateSidebarSummary(dashboard);
+
+      if (safeGetElement('grafico-categorias') && dashboard.categorias) {
+        renderChart(dashboard.categorias);
       }
     }
   } catch (err) {
@@ -76,10 +65,11 @@ async function loadDashboard() {
 // ===== MOVIMENTAÇÕES =====
 async function loadMovimentacoes() {
   try {
-    const { success, data } = await fetchJSON(`${API_URL}/api/movimentacoes`);
-
-    if (success && Array.isArray(data)) {
-      movimentacoesData = data;
+    const response = await fetch(`${API_URL}/controle-gastos-powerbi`);
+    const result = await response.json();
+    
+    if (result.success && result.data && result.data.dashboard && result.data.dashboard.movimentacoes) {
+      movimentacoesData = result.data.dashboard.movimentacoes;
       renderMovimentacoes();
       updateSidebarDetails();
     }
@@ -88,12 +78,13 @@ async function loadMovimentacoes() {
   }
 }
 
+// ===== RESUMO LATERAL =====
 function updateSidebarSummary(data) {
   const sideGastos = safeGetElement('side-gastos');
   const sideEntradas = safeGetElement('side-entradas');
-  
+
   if (sideGastos) sideGastos.textContent = formatBRL(data.gastosMes);
-  if (sideEntradas) sideEntradas.textContent = formatBRL(data.entradasMes);
+  if (sideEntradas) sideEntradas.textContent = formatBRL(data.entradasMes || 0);
 }
 
 function updateSidebarDetails() {
@@ -104,7 +95,7 @@ function updateSidebarDetails() {
   const detailReceitas = safeGetElement('detail-receitas');
   const detailCategorias = safeGetElement('detail-categorias');
   const detailUltima = safeGetElement('detail-ultima');
-  
+
   if (detailReceitas) detailReceitas.textContent = entradas;
   if (detailCategorias) detailCategorias.textContent = categorias;
   if (detailUltima) detailUltima.textContent = ultima;
@@ -133,7 +124,7 @@ function setFilter(filter) {
 function renderMovimentacoes() {
   const tbody = safeGetElement('tabela-movimentos');
   if (!tbody) return;
-  
+
   const rows = movimentacoesData
     .filter((item) => currentFilter === 'all' || item.tipo === currentFilter)
     .map((m) => {
@@ -141,12 +132,12 @@ function renderMovimentacoes() {
       const typeColor = m.tipo === 'gasto' ? 'text-orange-400' : 'text-cyan-400';
 
       return `
-        <tr class="transition hover:bg-slate-800/80">
-          <td class="px-5 py-4 text-sm text-slate-300">${formatDate(m.data_hora)}</td>
-          <td class="px-5 py-4 text-sm"><span class="${typeColor} font-semibold">${typeLabel}</span></td>
-          <td class="px-5 py-4 text-sm text-slate-300">${m.categoria}</td>
-          <td class="px-5 py-4 text-sm text-slate-300">${m.descricao}</td>
-          <td class="px-5 py-4 text-sm font-semibold ${m.tipo === 'gasto' ? 'text-orange-400' : 'text-cyan-400'}">${formatBRL(m.valor)}</td>
+        <tr class="border-b border-slate-800 hover:bg-slate-800/50 transition-colors">
+          <td class="py-4 px-2">${formatDate(m.data_hora)}</td>
+          <td class="py-4 px-2 ${typeColor} font-medium">${typeLabel}</td>
+          <td class="py-4 px-2">${m.categoria}</td>
+          <td class="py-4 px-2 text-slate-300">${m.descricao}</td>
+          <td class="py-4 px-2 font-semibold ${typeColor}">${formatBRL(m.valor)}</td>
         </tr>
       `;
     });
@@ -154,7 +145,9 @@ function renderMovimentacoes() {
   if (!rows.length) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="5" class="px-5 py-8 text-center text-sm text-slate-500">Nenhuma movimentação encontrada para este filtro.</td>
+        <td colspan="5" class="py-8 text-center text-slate-500">
+          Nenhuma movimentação encontrada para este filtro.
+        </td>
       </tr>
     `;
     return;
@@ -170,10 +163,9 @@ function renderChart(categorias) {
     console.log('📊 Gráfico: elementos ausentes ou sem dados');
     return;
   }
-  
+
   const ctx = canvas.getContext('2d');
-  
-  // Cores vibrantes e harmônicas
+
   const chartColors = [
     '#38bdf8', // Azul claro
     '#fb923c', // Laranja
@@ -183,9 +175,9 @@ function renderChart(categorias) {
     '#60a5fa', // Azul médio
     '#fbbf24', // Âmbar
   ];
-  
+
   const totalValue = categorias.reduce((sum, item) => sum + item.total, 0);
-  
+
   if (chartInstance) chartInstance.destroy();
 
   chartInstance = new Chart(ctx, {
@@ -206,8 +198,8 @@ function renderChart(categorias) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      cutout: '70%', // Mais fino e elegante
-      layout: { 
+      cutout: '70%',
+      layout: {
         padding: { top: 20, bottom: 20, left: 10, right: 10 }
       },
       plugins: {
@@ -255,41 +247,39 @@ function renderChart(categorias) {
             },
           },
         },
+        animation: {
+          animateScale: true,
+          animateRotate: true,
+          duration: 1200,
+          easing: 'easeOutQuart',
+        },
+        hover: {
+          mode: 'nearest',
+          intersect: false,
+          animationDuration: 300,
+        },
       },
-      animation: {
-        animateScale: true,
-        animateRotate: true,
-        duration: 1200,
-        easing: 'easeOutQuart',
-      },
-      hover: {
-        mode: 'nearest',
-        intersect: false,
-        animationDuration: 300,
-      },
+      plugins: [{
+        id: 'centerText',
+        beforeDraw: (chart) => {
+          const { width, height, ctx } = chart;
+          ctx.save();
+
+          const fontSize = (height / 16).toFixed(2);
+          ctx.font = `700 ${fontSize}px Inter, sans-serif`;
+          ctx.fillStyle = '#f1f5f9';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(formatBRL(totalValue), width / 2, height / 2 - 12);
+
+          ctx.font = `400 ${Math.max(fontSize * 0.65, 11)}px Inter, sans-serif`;
+          ctx.fillStyle = '#64748b';
+          ctx.fillText('Total', width / 2, height / 2 + 16);
+
+          ctx.restore();
+        },
+      }],
     },
-    plugins: [{
-      id: 'centerText',
-      beforeDraw: (chart) => {
-        const { width, height, ctx } = chart;
-        ctx.save();
-        
-        // Total
-        const fontSize = (height / 16).toFixed(2);
-        ctx.font = `700 ${fontSize}px Inter, sans-serif`;
-        ctx.fillStyle = '#f1f5f9';
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(formatBRL(totalValue), width / 2, height / 2 - 12);
-        
-        // Label
-        ctx.font = `400 ${Math.max(fontSize * 0.65, 11)}px Inter, sans-serif`;
-        ctx.fillStyle = '#64748b';
-        ctx.fillText('Total', width / 2, height / 2 + 16);
-        
-        ctx.restore();
-      },
-    }],
   });
 }
 
@@ -318,7 +308,7 @@ function connectWebSocket() {
       console.log('🔌 WebSocket desconectado. Reconectando em 3s...');
       setTimeout(connectWebSocket, 3000);
     };
-    
+
     ws.onerror = (err) => {
       console.error('❌ Erro no WebSocket:', err);
     };
@@ -330,14 +320,15 @@ function connectWebSocket() {
 // ===== QR CODE =====
 async function loadQRCode() {
   try {
-    const { success, qrCode, botUrl } = await fetchJSON(`${API_URL}/api/qr-code`);
+    const response = await fetch(`${API_URL}/api/qr-code`);
+    const { success, qrCode, botUrl } = await response.json();
 
     if (success) {
       const qrImg = safeGetElement('qr-img');
       const qrLink = safeGetElement('qr-link');
-      
+
       if (qrImg) qrImg.src = qrCode;
-      if (qrLink) qrLink.innerHTML = `Link: <a href="${botUrl}" target="_blank" class="text-brand underline">${botUrl}</a>`;
+      if (qrLink) qrLink.innerHTML = `Link: ${botUrl} 🔗`;
     }
   } catch (err) {
     console.error('Erro ao carregar QR:', err);
@@ -347,24 +338,24 @@ async function loadQRCode() {
 function setupQRReader() {
   const btnIniciar = safeGetElement('btn-iniciar-leitor');
   const btnGerar = safeGetElement('btn-gerar-qr');
-  
+
   if (!btnIniciar || !btnGerar) {
     console.log('📷 Elementos do QR Reader não encontrados');
     return;
   }
-  
+
   let html5QrCode = null;
-  
+
   btnIniciar.addEventListener('click', async () => {
     const readerDiv = safeGetElement('qr-reader');
     if (!readerDiv) return;
-    
+
     readerDiv.classList.remove('hidden');
 
     try {
       if (typeof Html5Qrcode !== 'undefined') {
         html5QrCode = new Html5Qrcode('qr-reader');
-        
+
         await html5QrCode.start(
           { facingMode: 'environment' },
           { fps: 10, qrbox: { width: 250, height: 250 } },
