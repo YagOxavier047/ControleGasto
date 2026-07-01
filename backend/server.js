@@ -6,6 +6,60 @@ const http = require('http');
 const WebSocket = require('ws');
 require('dotenv').config();
 
+const client = require('prom-client');
+
+// Coletar métricas padrão do Node.js
+const collectDefaultMetrics = client.collectDefaultMetrics;
+collectDefaultMetrics();
+
+// Criar contador de requisições HTTP
+const httpRequestsTotal = new client.Counter({
+  name: 'http_requests_total',
+  help: 'Total de requisições HTTP',
+  labelNames: ['method', 'route', 'status_code']
+});
+
+// Criar histograma de duração das requisições
+const httpRequestDuration = new client.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duração das requisições HTTP em segundos',
+  labelNames: ['method', 'route', 'status_code'],
+  buckets: [0.01, 0.05, 0.1, 0.5, 1, 2, 5]
+});
+
+// Middleware para coletar métricas de todas as requisições
+app.use((req, res, next) => {
+  const start = Date.now();
+  
+  res.on('finish', () => {
+    const duration = (Date.now() - start) / 1000;
+    const route = req.route ? req.route.path : req.path;
+    
+    httpRequestsTotal.inc({
+      method: req.method,
+      route: route,
+      status_code: res.statusCode
+    });
+    
+    httpRequestDuration.observe(
+      { method: req.method, route: route, status_code: res.statusCode },
+      duration
+    );
+  });
+  
+  next();
+});
+
+// Endpoint para o Prometheus coletar métricas
+app.get('/metrics', async (req, res) => {
+  try {
+    res.set('Content-Type', client.register.contentType);
+    res.end(await client.register.metrics());
+  } catch (err) {
+    res.status(500).end(err);
+  }
+});
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 const WS_PORT = process.env.WS_PORT || 8080;
