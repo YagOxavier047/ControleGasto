@@ -35,14 +35,15 @@ async function init() {
 }
 
 // ===== ATUALIZAR DADOS DO BANCO =====
-async function atualizarDadosDoBanco() {
-    const btn = safeGetElement('btn-atualizar');
-    
-    if (!btn) {
-        console.error('Botão de atualizar não encontrado');
-        return;
-    }
-    
+const response = await fetch(`${API_URL}/api/dashboard/atualizar`, {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+        atualizar: true
+    })
+ });
     // Animação de loading
     const originalContent = btn.innerHTML;
     btn.innerHTML = `
