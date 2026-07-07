@@ -6,6 +6,9 @@ const http = require('http');
 const WebSocket = require('ws');
 require('dotenv').config();
 
+// ✅ CRIA O APP AQUI (ANTES DE QUALQUER app.use)
+const app = express();
+
 const client = require('prom-client');
 
 // Coletar métricas padrão do Node.js
@@ -41,64 +44,80 @@ app.use((req, res, next) => {
       status_code: res.statusCode
     });
     
-    httpRequestDuration.observe(
-      { method: req.method, route: route, status_code: res.statusCode },
-      duration
-    );
+    httpRequestDuration.observe({
+      method: req.method,
+      route: route,
+      status_code: res.statusCode
+    }, duration);
   });
   
   next();
 });
 
-// Endpoint para o Prometheus coletar métricas
+// Middleware para expor métricas do Prometheus
 app.get('/metrics', async (req, res) => {
   try {
     res.set('Content-Type', client.register.contentType);
     res.end(await client.register.metrics());
   } catch (err) {
-    res.status(500).end(err);
+    console.error('Erro ao gerar métricas:', err);
+    res.status(500).end('Erro ao gerar métricas');
   }
 });
 
-const app = express();
-const PORT = process.env.PORT || 3001;
-const WS_PORT = process.env.WS_PORT || 8080;
+// Configuração do Express
+app.use(cors());
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
-// Configuração do Pool de Conexão PostgreSQL
+// Configuração do PostgreSQL
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  host: process.env.DB_HOST || 'localhost',
+  port: process.env.DB_PORT || 5432,
+  database: process.env.DB_NAME || 'controle_gastos',
+  user: process.env.DB_USER || 'postgres',
+  password: process.env.DB_PASSWORD || '',
+  max: 20,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
 });
 
-// Função auxiliar para queries
-const query = async (text, params) => {
+// Testar conexão com o banco
+pool.connect((err, client, release) => {
+  if (err) {
+    console.error('❌ Erro ao conectar no banco:', err.message);
+  } else {
+    console.log('✅ Conexão com PostgreSQL estabelecida');
+    release();
+  }
+});
+
+// Helper para executar queries com log
+async function query(text, params) {
   const start = Date.now();
   try {
     const res = await pool.query(text, params);
     const duration = Date.now() - start;
     console.log('Executado query', { text, duration, rows: res.rowCount });
     return res;
-  } catch (error) {
-    console.error('Erro na query', error);
-    throw error;
+  } catch (err) {
+    console.error('Erro na query', { text, error: err.message });
+    throw err;
   }
-};
+}
 
-// Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, '../frontend')));
+// ===== ROTAS DA API =====
 
-// ===== ROTAS DA API (ANTES DO CATCH-ALL) =====
-
-// Rota da API: Dashboard
+// Dashboard - Dados principais
 app.get('/api/dashboard', async (req, res) => {
   try {
+    // Saldo total
     const saldoResult = await query(`
       SELECT COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE -valor END), 0) as saldo
       FROM movimentos
     `);
     
+    // Gastos do mês
     const gastosResult = await query(`
       SELECT COALESCE(SUM(valor), 0) as total 
       FROM movimentos 
@@ -107,6 +126,7 @@ app.get('/api/dashboard', async (req, res) => {
       AND EXTRACT(YEAR FROM data_hora) = EXTRACT(YEAR FROM CURRENT_DATE)
     `);
     
+    // Entradas do mês
     const entradasResult = await query(`
       SELECT COALESCE(SUM(valor), 0) as total 
       FROM movimentos 
@@ -114,19 +134,22 @@ app.get('/api/dashboard', async (req, res) => {
       AND EXTRACT(MONTH FROM data_hora) = EXTRACT(MONTH FROM CURRENT_DATE)
       AND EXTRACT(YEAR FROM data_hora) = EXTRACT(YEAR FROM CURRENT_DATE)
     `);
-
-    const totalReceitasResult = await query(`
+    
+    // Total de entradas (histórico)
+    const totalEntradasResult = await query(`
       SELECT COALESCE(SUM(valor), 0) as total 
       FROM movimentos 
       WHERE tipo = 'entrada'
     `);
-
-    const totalDespesasResult = await query(`
+    
+    // Total de gastos (histórico)
+    const totalGastosResult = await query(`
       SELECT COALESCE(SUM(valor), 0) as total 
       FROM movimentos 
       WHERE tipo IN ('gasto', 'saida')
     `);
     
+    // Categorias mais gastas
     const categoriasResult = await query(`
       SELECT categoria, SUM(valor) as total, COUNT(*) as qtd
       FROM movimentos 
@@ -135,94 +158,148 @@ app.get('/api/dashboard', async (req, res) => {
       ORDER BY total DESC
       LIMIT 5
     `);
-
-    res.json({
-      success: true,
-      data: {
-        saldo: parseFloat(saldoResult.rows[0].saldo),
-        gastosMes: parseFloat(gastosResult.rows[0].total),
-        entradasMes: parseFloat(entradasResult.rows[0].total),
-        totalReceitas: parseFloat(totalReceitasResult.rows[0].total),
-        totalDespesas: parseFloat(totalDespesasResult.rows[0].total),
-        categorias: categoriasResult.rows.map(row => ({
-          categoria: row.categoria,
-          total: parseFloat(row.total),
-          qtd: row.qtd
-        }))
-      }
-    });
-  } catch (error) {
-    console.error('Erro ao buscar dados do dashboard:', error);
-    res.status(500).json({ success: false, error: 'Erro interno do servidor' });
-  }
-});
-
-// Rota da API: Listar Movimentações (CORRIGIDO: nome da rota)
-app.get('/api/movimentacoes', async (req, res) => {
-  try {
-    const result = await query(`
+    
+    // Últimas movimentações
+    const movimentacoesResult = await query(`
       SELECT id, descricao, valor, tipo, categoria, data_hora
       FROM movimentos
       ORDER BY data_hora DESC
       LIMIT 50
     `);
-    res.json({ success: true, data: result.rows });
-  } catch (error) {
-    console.error('Erro ao buscar movimentações:', error);
-    res.status(500).json({ success: false, error: error.message });
+    
+    res.json({
+      success: true,
+      data: {
+        dashboard: {
+          saldo: parseFloat(saldoResult.rows[0].saldo),
+          gastosMes: parseFloat(gastosResult.rows[0].total),
+          entradasMes: parseFloat(entradasResult.rows[0].total),
+          totalEntradas: parseFloat(totalEntradasResult.rows[0].total),
+          totalGastos: parseFloat(totalGastosResult.rows[0].total),
+          categorias: categoriasResult.rows.map(row => ({
+            categoria: row.categoria,
+            total: parseFloat(row.total),
+            qtd: row.qtd
+          })),
+          movimentacoes: movimentacoesResult.rows.map(row => ({
+            id: row.id,
+            descricao: row.descricao,
+            valor: parseFloat(row.valor),
+            tipo: row.tipo,
+            categoria: row.categoria,
+            data_hora: row.data_hora
+          }))
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Erro ao buscar dashboard:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Rota da API: Adicionar Movimentação
-app.post('/api/movimentacoes', async (req, res) => {
-  const { descricao, valor, tipo, categoria, data_hora } = req.body;
+// Endpoint para a Lambda (com opção de buscar do banco real)
+app.post('/api/dashboard/atualizar', async (req, res) => {
   try {
-    const result = await query(
-      `INSERT INTO movimentos (descricao, valor, tipo, categoria, data_hora)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING *`,
-      [descricao, valor, tipo, categoria, data_hora || new Date()]
-    );
+    const { atualizar } = req.body;
     
-    // Notifica via WebSocket
-    if (wss) {
-      wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({
-            type: 'nova_movimentacao',
-            data: result.rows[0]
-          }));
+    if (atualizar) {
+      // Busca dados reais do banco (mesma lógica do GET /api/dashboard)
+      const saldoResult = await query(`
+        SELECT COALESCE(SUM(CASE WHEN tipo = 'entrada' THEN valor ELSE -valor END), 0) as saldo
+        FROM movimentos
+      `);
+      
+      const gastosResult = await query(`
+        SELECT COALESCE(SUM(valor), 0) as total 
+        FROM movimentos 
+        WHERE tipo IN ('gasto', 'saida')
+        AND EXTRACT(MONTH FROM data_hora) = EXTRACT(MONTH FROM CURRENT_DATE)
+        AND EXTRACT(YEAR FROM data_hora) = EXTRACT(YEAR FROM CURRENT_DATE)
+      `);
+      
+      const entradasResult = await query(`
+        SELECT COALESCE(SUM(valor), 0) as total 
+        FROM movimentos 
+        WHERE tipo = 'entrada'
+        AND EXTRACT(MONTH FROM data_hora) = EXTRACT(MONTH FROM CURRENT_DATE)
+        AND EXTRACT(YEAR FROM data_hora) = EXTRACT(YEAR FROM CURRENT_DATE)
+      `);
+      
+      const categoriasResult = await query(`
+        SELECT categoria, SUM(valor) as total, COUNT(*) as qtd
+        FROM movimentos 
+        WHERE tipo IN ('gasto', 'saida')
+        GROUP BY categoria
+        ORDER BY total DESC
+        LIMIT 5
+      `);
+      
+      const movimentacoesResult = await query(`
+        SELECT id, descricao, valor, tipo, categoria, data_hora
+        FROM movimentos
+        ORDER BY data_hora DESC
+        LIMIT 50
+      `);
+      
+      res.json({
+        success: true,
+        message: 'Dados atualizados do banco',
+        data: {
+          dashboard: {
+            saldo: parseFloat(saldoResult.rows[0].saldo),
+            gastosMes: parseFloat(gastosResult.rows[0].total),
+            entradasMes: parseFloat(entradasResult.rows[0].total),
+            categorias: categoriasResult.rows.map(row => ({
+              categoria: row.categoria,
+              total: parseFloat(row.total),
+              qtd: row.qtd
+            })),
+            movimentacoes: movimentacoesResult.rows.map(row => ({
+              id: row.id,
+              descricao: row.descricao,
+              valor: parseFloat(row.valor),
+              tipo: row.tipo,
+              categoria: row.categoria,
+              data_hora: row.data_hora
+            }))
+          }
+        }
+      });
+    } else {
+      // Retorna dados mockados para teste
+      res.json({
+        success: true,
+        data: {
+          dashboard: {
+            saldo: 15000.50,
+            gastosMes: 3250.75,
+            entradasMes: 8500.00,
+            categorias: [
+              { categoria: 'Alimentação', total: 1200.00, qtd: 15 },
+              { categoria: 'Transporte', total: 850.50, qtd: 22 },
+              { categoria: 'Lazer', total: 650.25, qtd: 8 }
+            ],
+            movimentacoes: [
+              { id: 1, descricao: 'Supermercado', valor: 350.00, tipo: 'gasto', categoria: 'Alimentação', data_hora: new Date().toISOString() },
+              { id: 2, descricao: 'Salário', valor: 5000.00, tipo: 'entrada', categoria: 'Renda', data_hora: new Date().toISOString() }
+            ]
+          }
         }
       });
     }
-    
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error('Erro ao adicionar movimentação:', error);
-    res.status(500).json({ success: false, error: error.message });
+  } catch (err) {
+    console.error('Erro ao atualizar dashboard:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Rota da API: Deletar Movimentação
-app.delete('/api/movimentacoes/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    await query('DELETE FROM movimentos WHERE id = $1', [id]);
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Erro ao deletar movimentação:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Rota da API: QR Code (NOVA ROTA)
+// QR Code do Bot
 app.get('/api/qr-code', async (req, res) => {
   try {
-    // Gera URL do bot (substitua pelo seu username real)
-    const botUsername = 'seu_bot_username'; // ← COLOQUE SEU BOT AQUI
-    const botUrl = `https://t.me/${botUsername}`;
+    const botUrl = process.env.BOT_URL || 'https://t.me/seu_bot';
     
-    // Gera QR Code em base64 (usando API pública)
+    // Gera URL do QR Code (usando API pública)
     const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(botUrl)}`;
     
     res.json({
@@ -230,38 +307,83 @@ app.get('/api/qr-code', async (req, res) => {
       qrCode: qrCodeUrl,
       botUrl: botUrl
     });
-  } catch (error) {
-    console.error('Erro ao gerar QR Code:', error);
-    res.status(500).json({ success: false, error: 'Erro ao gerar QR Code' });
+  } catch (err) {
+    console.error('Erro ao gerar QR Code:', err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Serve o frontend para qualquer outra rota (POR ÚLTIMO!)
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../frontend/index.html'));
+// Servir frontend em produção
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../frontend')));
+  
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/index.html'));
+  });
+}
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// ===== SERVIDOR HTTP + WEBSOCKET =====
+// ===== WEBSOCKET =====
 const server = http.createServer(app);
-
-// WebSocket Server na porta 8080
-const wss = new WebSocket.Server({ port: WS_PORT });
+const wss = new WebSocket.Server({ server, path: '/ws' });
 
 wss.on('connection', (ws) => {
-  console.log('✅ Cliente WebSocket conectado');
+  console.log('🔌 Cliente WebSocket conectado');
+  
+  ws.on('message', async (message) => {
+    try {
+      const data = JSON.parse(message);
+      
+      // Exemplo: receber nova movimentação via WebSocket
+      if (data.type === 'nova_movimentacao') {
+        // Broadcast para todos os clientes conectados
+        wss.clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify({
+              type: 'nova_movimentacao',
+              data: data.payload
+            }));
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Erro ao processar mensagem WebSocket:', err);
+    }
+  });
   
   ws.on('close', () => {
     console.log('🔌 Cliente WebSocket desconectado');
   });
-  
-  ws.on('error', (err) => {
-    console.error('❌ Erro no WebSocket:', err);
+});
+
+// ===== INICIAR SERVIDOR =====
+const PORT = process.env.PORT || 3001;
+const WS_PORT = process.env.WS_PORT || 8080;
+
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Servidor HTTP rodando em http://0.0.0.0:${PORT}`);
+  console.log(`🚀 WebSocket rodando em ws://localhost:${WS_PORT}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', async () => {
+  console.log('🔄 Recebido SIGTERM, fechando conexões...');
+  await pool.end();
+  server.close(() => {
+    console.log('✅ Servidor fechado');
+    process.exit(0);
   });
 });
 
-console.log(`🚀 WebSocket rodando em ws://localhost:${WS_PORT}`);
-
-// Iniciar servidor HTTP
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Servidor HTTP rodando em http://0.0.0.0:${PORT}`);
+process.on('SIGINT', async () => {
+  console.log('🔄 Recebido SIGINT, fechando conexões...');
+  await pool.end();
+  server.close(() => {
+    console.log('✅ Servidor fechado');
+    process.exit(0);
+  });
 });
