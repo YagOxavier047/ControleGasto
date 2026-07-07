@@ -5,17 +5,13 @@ import time
 import io
 import requests
 from dotenv import load_dotenv
-import os
-
-# Carrega variáveis do arquivo .env
-load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
-  # ← Para enviar dados ao backend via HTTP
 from datetime import datetime
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
+
 from bd import (
     inserir_gasto, inserir_entrada, listar_gastos, 
     limpar_gastos, detalhes_mes, criar_tabela,
@@ -23,9 +19,15 @@ from bd import (
     set_orcamento, get_orcamento
 )
 
+# ✅ Carrega variáveis do arquivo .env da pasta backend
+# Ajuste o caminho conforme sua estrutura de pastas
+env_path = os.path.join(os.path.dirname(__file__), '..', 'backend', '.env')
+load_dotenv(env_path)
+
 # ⚙️ Configurações
-TOKEN = "8585855474:AAFunl2wnS-rYfSXhtd0jIxlA3aqPygso6w"  # ← Substitua se necessário
-BACKEND_WEBHOOK = "http://localhost:3001/api/webhook/bot"  # ← URL do seu backend
+# Usa a variável de ambiente se existir, senão usa o valor padrão
+TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "8585855474:AAFunl2wnS-rYfSXhtd0jIxlA3aqPygso6w")
+BACKEND_WEBHOOK = "http://localhost:3001/api/webhook/bot"
 
 bot = telebot.TeleBot(TOKEN)
 
