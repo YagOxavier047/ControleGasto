@@ -6,38 +6,67 @@ from dotenv import load_dotenv
 from psycopg2.extras import RealDictCursor
 from datetime import datetime
 
-# Carrega variáveis de ambiente do arquivo .env
-load_dotenv()
+# =============================================================================
+# 🔧 CARREGAMENTO ROBUSTO DE VARIÁVEIS DE AMBIENTE
+# =============================================================================
+
+# Lista de caminhos possíveis para o arquivo .env (ordem de prioridade)
+env_paths = [
+    os.path.join(os.path.dirname(__file__), 'backend', '.env'),      # Quando rodando da raiz
+    '/home/ubuntu/ControleGasto/backend/.env',                        # Caminho absoluto na VM
+    os.path.join(os.path.dirname(__file__), '..', 'backend', '.env'), # Quando rodando de bot/
+    os.path.join(os.path.dirname(__file__), '.env'),                  # Fallback local
+]
+
+# Tenta carregar o primeiro .env que existir
+env_loaded = False
+for env_path in env_paths:
+    if os.path.exists(env_path):
+        print(f"📄 Carregando .env de: {env_path}")
+        load_dotenv(env_path)
+        env_loaded = True
+        break
+
+if not env_loaded:
+    print("⚠️ Aviso: Nenhum arquivo .env encontrado nos caminhos padrão")
+
+# =============================================================================
+# 🔗 CONFIGURAÇÃO DA CONEXÃO COM O BANCO
+# =============================================================================
+
+# Obtém a DATABASE_URL
+CONNECTION_STRING = os.getenv("DATABASE_URL")
+
+# Fallback: Se não encontrou no .env, usa valor hardcoded (apenas para desenvolvimento)
+if not CONNECTION_STRING:
+    print("⚠️ AVISO CRÍTICO: DATABASE_URL não encontrada! Usando valor padrão...")
+    print("   Para corrigir permanentemente, adicione DATABASE_URL no backend/.env")
+    CONNECTION_STRING = 'postgresql://postgres:Midmid1064@controle-gasto-db.ca9i46ugmws0.us-east-1.rds.amazonaws.com:5432/postgres?ssl=true'
+
+# Garante SSL na conexão (obrigatório para RDS)
+if "?" in CONNECTION_STRING:
+    if "sslmode" not in CONNECTION_STRING and "ssl" not in CONNECTION_STRING:
+        CONNECTION_STRING += "&sslmode=require"
+else:
+    CONNECTION_STRING += "?sslmode=require"
 
 # Configuração de logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Connection string do AWS RDS (via variável de ambiente)
-CONNECTION_STRING = os.getenv("DATABASE_URL")
-
-if not CONNECTION_STRING:
-    raise RuntimeError(
-        "DATABASE_URL não configurada. "
-        "Defina a variável de ambiente DATABASE_URL com a string de conexão do PostgreSQL."
-    )
-
-# Garante SSL na conexão (obrigatório para RDS)
-if "?" in CONNECTION_STRING:
-    if "sslmode" not in CONNECTION_STRING:
-        CONNECTION_STRING += "&sslmode=require"
-else:
-    CONNECTION_STRING += "?sslmode=require"
+# Log da conexão (sem expor a senha completa)
+db_host = CONNECTION_STRING.split('@')[-1].split(':')[0] if '@' in CONNECTION_STRING else 'unknown'
+logger.info(f"🔗 Configurado para conectar em: {db_host}")
 
 
 def conectar():
     """Retorna uma nova conexão com o banco."""
     try:
         conn = psycopg2.connect(CONNECTION_STRING)
-        logger.info("Conexão com banco de dados estabelecida com sucesso")
+        logger.info("✅ Conexão com banco de dados estabelecida com sucesso")
         return conn
     except psycopg2.OperationalError as e:
-        logger.error(f"Falha ao conectar ao banco de dados: {e}")
+        logger.error(f"❌ Falha ao conectar ao banco de dados: {e}")
         raise
 
 
@@ -72,9 +101,9 @@ def criar_tabela():
         """)
 
         db.commit()
-        logger.info("Tabelas criadas/validadas com sucesso")
+        logger.info("✅ Tabelas criadas/validadas com sucesso")
     except Exception as e:
-        logger.error(f"Erro ao criar tabelas: {e}")
+        logger.error(f"❌ Erro ao criar tabelas: {e}")
         if db:
             db.rollback()
         raise
@@ -97,9 +126,9 @@ def inserir_gasto(descricao, valor, categoria='Geral'):
             VALUES ('gasto', %s, %s, %s)
         """, (categoria, valor, descricao))
         db.commit()
-        logger.info(f"Gasto inserido: {descricao} - R$ {valor}")
+        logger.info(f"💸 Gasto inserido: {descricao} - R$ {valor}")
     except Exception as e:
-        logger.error(f"Erro ao inserir gasto: {e}")
+        logger.error(f"❌ Erro ao inserir gasto: {e}")
         if db:
             db.rollback()
         raise
@@ -122,9 +151,9 @@ def inserir_entrada(descricao, valor):
             VALUES ('entrada', %s, %s)
         """, (valor, descricao))
         db.commit()
-        logger.info(f"Entrada inserida: {descricao} - R$ {valor}")
+        logger.info(f"💰 Entrada inserida: {descricao} - R$ {valor}")
     except Exception as e:
-        logger.error(f"Erro ao inserir entrada: {e}")
+        logger.error(f"❌ Erro ao inserir entrada: {e}")
         if db:
             db.rollback()
         raise
@@ -158,10 +187,10 @@ def listar_gastos(mes=None):
             """)
         
         resultados = cursor.fetchall()
-        logger.info(f"Listados {len(resultados)} movimentos")
+        logger.info(f"📋 Listados {len(resultados)} movimentos")
         return resultados
     except Exception as e:
-        logger.error(f"Erro ao listar gastos: {e}")
+        logger.error(f"❌ Erro ao listar gastos: {e}")
         raise
     finally:
         if cursor:
@@ -189,7 +218,7 @@ def get_categorias_mes():
         resultados = cursor.fetchall()
         return resultados
     except Exception as e:
-        logger.error(f"Erro ao buscar categorias do mês: {e}")
+        logger.error(f"❌ Erro ao buscar categorias do mês: {e}")
         raise
     finally:
         if cursor:
@@ -218,7 +247,7 @@ def detalhes_mes():
         gastos = float(resultado[1]) if resultado and resultado[1] else 0.0
         return entradas, gastos, entradas - gastos
     except Exception as e:
-        logger.error(f"Erro ao buscar detalhes do mês: {e}")
+        logger.error(f"❌ Erro ao buscar detalhes do mês: {e}")
         raise
     finally:
         if cursor:
@@ -244,7 +273,7 @@ def saldo_disponivel():
         saldo = float(resultado[0]) if resultado and resultado[0] else 0.0
         return saldo
     except Exception as e:
-        logger.error(f"Erro ao calcular saldo disponível: {e}")
+        logger.error(f"❌ Erro ao calcular saldo disponível: {e}")
         raise
     finally:
         if cursor:
@@ -267,9 +296,9 @@ def set_orcamento(limite):
             ON CONFLICT (mes_ano) DO UPDATE SET limite = %s
         """, (mes_atual, limite, limite))
         db.commit()
-        logger.info(f"Orçamento definido para {mes_atual}: R$ {limite}")
+        logger.info(f"🎯 Orçamento definido para {mes_atual}: R$ {limite}")
     except Exception as e:
-        logger.error(f"Erro ao definir orçamento: {e}")
+        logger.error(f"❌ Erro ao definir orçamento: {e}")
         if db:
             db.rollback()
         raise
@@ -292,7 +321,7 @@ def get_orcamento():
         resultado = cursor.fetchone()
         return float(resultado[0]) if resultado else None
     except Exception as e:
-        logger.error(f"Erro ao buscar orçamento: {e}")
+        logger.error(f"❌ Erro ao buscar orçamento: {e}")
         raise
     finally:
         if cursor:
@@ -310,9 +339,9 @@ def limpar_gastos():
         cursor = db.cursor()
         cursor.execute("DELETE FROM movimentos")
         db.commit()
-        logger.info("Todos os registros de movimentos foram apagados")
+        logger.info("🗑️ Todos os registros de movimentos foram apagados")
     except Exception as e:
-        logger.error(f"Erro ao limpar gastos: {e}")
+        logger.error(f"❌ Erro ao limpar gastos: {e}")
         if db:
             db.rollback()
         raise
