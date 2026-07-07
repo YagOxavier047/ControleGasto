@@ -1,6 +1,6 @@
 // ===== CONFIGURAÇÃO DA API =====
 const API_URL = 'https://mm7l9zx6wa.execute-api.us-east-1.amazonaws.com/default';
-const WS_URL = 'ws://54.196.11.194:8080'; // Mantém WebSocket se ainda usar
+const WS_URL = 'ws://54.196.11.194:8080';
 
 // ===== UTILITÁRIOS =====
 const formatBRL = (value) =>
@@ -32,6 +32,119 @@ async function init() {
   } catch (err) {
     console.error('Erro na inicialização:', err);
   }
+}
+
+// ===== ATUALIZAR DADOS DO BANCO =====
+async function atualizarDadosDoBanco() {
+    const btn = safeGetElement('btn-atualizar');
+    
+    if (!btn) {
+        console.error('Botão de atualizar não encontrado');
+        return;
+    }
+    
+    // Animação de loading
+    const originalContent = btn.innerHTML;
+    btn.innerHTML = `
+        <svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+        </svg>
+        <span>Atualizando...</span>
+    `;
+    btn.disabled = true;
+    btn.classList.add('opacity-75', 'cursor-not-allowed');
+    
+    try {
+        // Chama a Lambda com parâmetro para buscar do banco
+        const response = await fetch(`${API_URL}/controle-gastos-powerbi`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                atualizar: true
+            })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success && result.data && result.data.dashboard) {
+            const dashboard = result.data.dashboard;
+            
+            // Atualiza dashboard
+            await atualizarInterface(dashboard);
+            
+            // Mostra mensagem de sucesso
+            mostrarNotificacao('✅ Dados atualizados com sucesso!', 'success');
+        } else {
+            throw new Error('Falha ao atualizar dados');
+        }
+        
+    } catch (err) {
+        console.error('Erro ao atualizar dados:', err);
+        mostrarNotificacao('❌ Erro ao atualizar dados. Tente novamente.', 'error');
+    } finally {
+        // Restaura botão
+        btn.innerHTML = originalContent;
+        btn.disabled = false;
+        btn.classList.remove('opacity-75', 'cursor-not-allowed');
+    }
+}
+
+async function atualizarInterface(dashboard) {
+    // Atualiza cards
+    const saldoEl = safeGetElement('saldo');
+    const gastosEl = safeGetElement('gastos-mes');
+    const entradasEl = safeGetElement('entradas-mes');
+    
+    if (saldoEl) saldoEl.textContent = formatBRL(dashboard.saldo);
+    if (gastosEl) gastosEl.textContent = formatBRL(dashboard.gastosMes);
+    if (entradasEl) entradasEl.textContent = formatBRL(dashboard.entradasMes || 0);
+    
+    // Atualiza movimentações
+    if (dashboard.movimentacoes) {
+        movimentacoesData = dashboard.movimentacoes;
+        renderMovimentacoes();
+        updateSidebarDetails();
+    }
+    
+    // Atualiza gráfico
+    if (dashboard.categorias && safeGetElement('grafico-categorias')) {
+        renderChart(dashboard.categorias);
+    }
+    
+    // Atualiza resumo lateral
+    updateSidebarSummary(dashboard);
+}
+
+function mostrarNotificacao(mensagem, tipo = 'success') {
+    // Cria elemento de notificação
+    const notificacao = document.createElement('div');
+    notificacao.className = `fixed top-4 right-4 px-6 py-4 rounded-lg shadow-2xl z-50 transform transition-all duration-300 translate-x-full ${
+        tipo === 'success' ? 'bg-green-500' : 'bg-red-500'
+    } text-white`;
+    notificacao.innerHTML = `
+        <div class="flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${tipo === 'success' ? 'M5 13l4 4L19 7' : 'M6 18L18 6M6 6l12 12'}" />
+            </svg>
+            <span class="font-semibold">${mensagem}</span>
+        </div>
+    `;
+    
+    document.body.appendChild(notificacao);
+    
+    // Anima entrada
+    setTimeout(() => {
+        notificacao.classList.remove('translate-x-full');
+    }, 100);
+    
+    // Remove após 3 segundos
+    setTimeout(() => {
+        notificacao.classList.add('translate-x-full', 'opacity-0');
+        setTimeout(() => notificacao.remove(), 300);
+    }, 3000);
 }
 
 // ===== DASHBOARD =====
