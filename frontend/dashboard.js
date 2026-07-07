@@ -1,6 +1,6 @@
 // ===== CONFIGURAÇÃO DA API =====
 const API_URL = 'https://mm7l9zx6wa.execute-api.us-east-1.amazonaws.com/default';
-const WS_URL = 'ws://54.196.11.194:8080';
+const WS_URL = 'ws://3.91.92.106:8080';
 
 // ===== UTILITÁRIOS =====
 const formatBRL = (value) =>
