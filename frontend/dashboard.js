@@ -1,5 +1,5 @@
 // ===== CONFIGURAÇÃO DA API =====
-const API_URL = 'https://mm7l9zx6wa.execute-api.us-east-1.amazonaws.com/default';
+const API_URL = 'http://3.91.92.106:3001';
 const WS_URL = 'ws://3.91.92.106:8080';
 
 // ===== UTILITÁRIOS =====
