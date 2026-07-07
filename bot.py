@@ -3,7 +3,13 @@ import telebot
 import os
 import time
 import io
-import requests  # ← Para enviar dados ao backend via HTTP
+import requests
+from dotenv import load_dotenv
+import os
+
+# Carrega variáveis do arquivo .env
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+  # ← Para enviar dados ao backend via HTTP
 from datetime import datetime
 from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
