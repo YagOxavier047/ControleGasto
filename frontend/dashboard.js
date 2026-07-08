@@ -1,6 +1,6 @@
 // ===== CONFIGURAÇÃO DA API =====
-const API_URL = 'http://3.91.92.106:3001';
-const WS_URL = 'ws://3.91.92.106:8080';
+const API_URL = 'http://54.198.117.52 :3001';
+const WS_URL = 'ws://54.198.117.52 :8080';
 
 // ===== UTILITÁRIOS =====
 const formatBRL = (value) =>
